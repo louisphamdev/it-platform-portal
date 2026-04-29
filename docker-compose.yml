@@ -1,0 +1,158 @@
+version: "3.9"
+
+services:
+  # === IDENTITY SERVICES ===
+  openldap:
+    image: osixia/openldap:1.5.0
+    container_name: ldap
+    environment:
+      LDAP_ORGANISATION: IT Platform
+      LDAP_DOMAIN: it-platform.internal
+      LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD:-admin123}
+    ports:
+      - "389:389"
+      - "636:636"
+    volumes:
+      - ldap-data:/var/lib/ldap
+      - ldap-config:/etc/ldap/slapd.d
+    networks:
+      - portal-net
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:23.0
+    container_name: keycloak
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin123}
+      KC_DB_URL: jdbc:postgresql://postgres-keycloak:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak123}
+    command: start-dev
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres-keycloak
+    networks:
+      - portal-net
+
+  # === DATABASE SERVICES ===
+  postgres-main:
+    image: postgres:16-alpine
+    container_name: postgres-main
+    environment:
+      POSTGRES_DB: it_platform
+      POSTGRES_USER: platform
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-platform123}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-main-data:/var/lib/postgresql/data
+    networks:
+      - portal-net
+
+  postgres-audit:
+    image: postgres:16-alpine
+    container_name: postgres-audit
+    environment:
+      POSTGRES_DB: audit_db
+      POSTGRES_USER: auditor
+      POSTGRES_PASSWORD: ${AUDIT_DB_PASSWORD:-audit123}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-audit-data:/var/lib/postgresql/data
+    networks:
+      - portal-net
+
+  postgres-keycloak:
+    image: postgres:16-alpine
+    container_name: postgres-keycloak
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak123}
+    volumes:
+      - postgres-keycloak-data:/var/lib/postgresql/data
+    networks:
+      - portal-net
+
+  # === APPLICATION SERVICES ===
+  api-gateway:
+    build:
+      context: ./src/api-gateway
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+    ports:
+      - "7000:7000"
+    depends_on:
+      - postgres-main
+      - keycloak
+    networks:
+      - portal-net
+
+  bff-auth:
+    build:
+      context: ./src/bff-auth
+      dockerfile: Dockerfile
+    container_name: bff-auth
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+    ports:
+      - "7001:7001"
+    depends_on:
+      - postgres-main
+      - openldap
+      - keycloak
+    networks:
+      - portal-net
+
+  bff-portal:
+    build:
+      context: ./src/bff-portal
+      dockerfile: Dockerfile
+    container_name: bff-portal
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+    ports:
+      - "7002:7002"
+    depends_on:
+      - postgres-main
+      - keycloak
+    networks:
+      - portal-net
+
+  portal-shell:
+    build:
+      context: ./src/portal-shell
+      dockerfile: Dockerfile
+    container_name: portal-shell
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_GATEWAY_URL: http://localhost:7000
+    networks:
+      - portal-net
+
+  # === UTILITIES ===
+  trivy:
+    image: aquasec/trivy:latest
+    container_name: trivy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - trivy-cache:/root/.cache/trivy
+    networks:
+      - portal-net
+
+networks:
+  portal-net:
+    driver: bridge
+
+volumes:
+  ldap-data:
+  ldap-config:
+  postgres-main-data:
+  postgres-audit-data:
+  postgres-keycloak-data:
+  trivy-cache:

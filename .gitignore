@@ -1,0 +1,80 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build outputs
+dist/
+build/
+out/
+*.dll
+*.exe
+*.dylib
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.log
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets - CRITICAL
+.env
+.env.*
+.env.local
+.env.*.local
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.priv
+*.pub
+credentials.json
+secrets.json
+secrets.yaml
+appsettings.*.json
+!appsettings.json
+!appsettings.Production.json
+config.*.json
+config.yaml
+config.local.yaml
+
+# Tokens & Passwords
+*token*
+*secret*
+*password*
+*credential*
+*.htpasswd
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test coverage
+coverage/
+.nyc_output/
+*.coverage
+*.coverage.xml
+
+# Security
+trivy-cache/
+grype-cache/

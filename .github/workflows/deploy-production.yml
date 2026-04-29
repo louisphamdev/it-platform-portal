@@ -1,0 +1,74 @@
+name: Deploy Production
+
+on:
+  push:
+    tags:
+      - "release/v*"
+
+env:
+  IMAGE_NAME: it-platform-portal
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    name: Build Production Image
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+
+  deploy:
+    name: Deploy to Production
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://it-platform.internal
+    steps:
+      - name: Deploy
+        run: echo "Deploying to production"
+
+      - name: Health check
+        run: echo "Running health checks"
+
+  release:
+    name: Create Release
+    needs: [deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Production Release ${{ github.ref_name }}
+          draft: false
+          body: |
+            ## Changes
+            Automated production release.
+
+            ## Image
+            ${{ needs.build.outputs.image-tag }}
+
+            ## Environment
+            Production: https://it-platform.internal
+          generate_release_notes: true
