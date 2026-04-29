@@ -1,0 +1,51 @@
+name: CI Build
+
+on:
+  push:
+    branches: [ main, staging, develop ]
+  pull_request:
+    branches: [ main, staging, develop ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          
+      - name: Check if source exists
+        id: check_source
+        run: |
+          if [ ! -f "src/**/*.csproj" ] && [ ! -f "package.json" ]; then
+            echo "No source files found — skipping build"
+            echo "skip_build=true" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Restore dependencies
+        if: steps.check_source.outputs.skip_build != 'true'
+        run: |
+          dotnet restore src/**/*.csproj
+          npm ci
+          
+      - name: Build
+        if: steps.check_source.outputs.skip_build != 'true'
+        run: |
+          dotnet build src/**/*.csproj --no-restore
+          npm run build
+          
+      - name: Test
+        if: steps.check_source.outputs.skip_build != 'true'
+        run: |
+          dotnet test src/**/*.csproj --no-build
+          npm test

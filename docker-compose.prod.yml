@@ -1,0 +1,54 @@
+# Production Environment Configuration
+# Usage: docker-compose -f docker-compose.base.yml -f docker-compose.prod.yml up -d
+
+name: it-platform-prod
+
+services:
+  openldap:
+    container_name: it-platform-prod-ldap
+    environment:
+      LDAP_ADMIN_PASSWORD: "${LDAP_ADMIN_PASSWORD}"
+    ports:
+      - "389:389"
+
+  keycloak:
+    container_name: it-platform-prod-keycloak
+    environment:
+      KEYCLOAK_ADMIN: "${KEYCLOAK_ADMIN}"
+      KEYCLOAK_ADMIN_PASSWORD: "${KEYCLOAK_ADMIN_PASSWORD}"
+      KC_DB_URL: "jdbc:postgresql://postgres-prod:5432/keycloak"
+    ports:
+      - "8443:8443"
+    command: ["start", "--https-port=8443"]
+    profiles:
+      - production
+
+  postgres-main:
+    container_name: postgres-prod
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "itportal_prod"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-prod-data:/var/lib/postgresql/data
+
+  postgres-audit:
+    container_name: postgres-prod-audit
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "itaudit_prod"
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-prod-audit-data:/var/lib/postgresql/data
+
+networks:
+  it-platform-net:
+    name: it-platform-prod-net
+
+volumes:
+  postgres-prod-data:
+  postgres-prod-audit-data:

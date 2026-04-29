@@ -1,0 +1,51 @@
+# Staging Environment Configuration
+# Usage: docker-compose -f docker-compose.base.yml -f docker-compose.staging.yml up
+
+name: it-platform-staging
+
+services:
+  openldap:
+    container_name: it-platform-staging-ldap
+    environment:
+      LDAP_ADMIN_PASSWORD: "${LDAP_ADMIN_PASSWORD:-staging_ldap_pass}"
+    ports:
+      - "389:389"
+
+  keycloak:
+    container_name: it-platform-staging-keycloak
+    environment:
+      KEYCLOAK_ADMIN: "${KEYCLOAK_ADMIN:-staging_admin}"
+      KEYCLOAK_ADMIN_PASSWORD: "${KEYCLOAK_ADMIN_PASSWORD:-staging_keycloak_pass}"
+      KC_DB_URL: "jdbc:postgresql://postgres-staging:5432/keycloak"
+    ports:
+      - "8080:8080"
+
+  postgres-main:
+    container_name: postgres-staging
+    environment:
+      POSTGRES_USER: "staging_postgres"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-staging_postgres_pass}"
+      POSTGRES_DB: "itportal_staging"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-staging-data:/var/lib/postgresql/data
+
+  postgres-audit:
+    container_name: postgres-staging-audit
+    environment:
+      POSTGRES_USER: "staging_postgres"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-staging_postgres_pass}"
+      POSTGRES_DB: "itaudit_staging"
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-staging-audit-data:/var/lib/postgresql/data
+
+networks:
+  it-platform-net:
+    name: it-platform-staging-net
+
+volumes:
+  postgres-staging-data:
+  postgres-staging-audit-data:
