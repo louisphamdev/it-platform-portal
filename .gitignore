@@ -36,9 +36,26 @@ lerna-debug.log*
 .DS_Store
 Thumbs.db
 
-# Environment
+# Environment - BLOCK ALL SECRETS
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
+
+# Certificates and keys
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Config files with secrets
+credentials.json
+secrets.json
+appsettings.*.json
+!appsettings.json
+
+# Token/secret patterns
+*token*
+*secret*
+*password*
+*credential*
