@@ -1,0 +1,59 @@
+name: Deploy to UAT
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  ENVIRONMENT: uat
+  DEPLOY_URL: uat.it-platform.internal
+  POSTGRES_DB: postgres-uat
+  POSTGRES_DB_NAME: itportal_uat
+
+jobs:
+  deploy-uat:
+    runs-on: ubuntu-latest
+    environment: uat
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure UAT environment
+        run: |
+          echo "UAT_DEPLOY=true" >> $GITHUB_ENV
+          echo "POSTGRES_USER=uat_postgres" >> $GITHUB_ENV
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.REGISTRY_URL }}
+          username: ${{ secrets.REGISTRY_USER }}
+          password: ${{ secrets.REGISTRY_TOKEN }}
+
+      - name: Build and push UAT images
+        run: |
+          docker-compose -f docker-compose.base.yml -f docker-compose.uat.yml build
+          docker-compose -f docker-compose.base.yml -f docker-compose.uat.yml push
+
+      - name: Deploy to UAT
+        run: |
+          # SSH to UAT server and pull/deploy
+          ssh ${{ secrets.UAT_DEPLOY_USER }}@${{ env.DEPLOY_URL }} \
+            "cd /opt/it-platform && \
+             docker-compose -f docker-compose.base.yml -f docker-compose.uat.yml pull && \
+             docker-compose -f docker-compose.base.yml -f docker-compose.uat.yml up -d && \
+             docker system prune -f"
+
+      - name: Verify UAT deployment
+        run: |
+          curl -f https://${{ env.DEPLOY_URL }}/health || exit 1
+
+      - name: Notify deployment
+        if: always()
+        run: |
+          echo "UAT Deployment completed - ${{ github.sha }} - ${{ github.actor }}"

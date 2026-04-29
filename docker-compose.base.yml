@@ -1,0 +1,102 @@
+version: '3.9'
+
+# Base compose file - shared configuration for all environments
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.{env}.yml up
+
+services:
+  # OpenLDAP Directory Service (shared across all envs)
+  openldap:
+    image: osixia/openldap:1.5.0
+    container_name: it-platform-ldap
+    environment:
+      LDAP_ORGANISATION: "IT Platform Corp"
+      LDAP_DOMAIN: "itplatform.internal"
+      LDAP_BASE_DN: "dc=itplatform,dc=internal"
+      LDAP_ADMIN_PASSWORD: "${LDAP_ADMIN_PASSWORD:-admin}"
+    ports:
+      - "${LDAP_PORT:-389}:389"
+    volumes:
+      - ldap-data:/var/lib/ldap
+      - ldap-config:/etc/ldap/slapd.d
+    networks:
+      - it-platform-net
+    healthcheck:
+      test: ["CMD", "ldapsearch", "-x", "-H", "ldap://localhost:389", "-b", "dc=itplatform,dc=internal"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Keycloak Identity Provider
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: it-platform-keycloak
+    environment:
+      KEYCLOAK_ADMIN: "${KEYCLOAK_ADMIN:-admin}"
+      KEYCLOAK_ADMIN_PASSWORD: "${KEYCLOAK_ADMIN_PASSWORD:-admin}"
+      KC_DB: "postgres"
+      KC_DB_URL: "jdbc:postgresql://postgres-main:5432/keycloak"
+      KC_DB_USERNAME: "${POSTGRES_USER:-postgres}"
+      KC_DB_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+    ports:
+      - "${KEYCLOAK_PORT:-8080}:8080"
+    command: ["start-dev"]
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+    networks:
+      - it-platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080;echo -e 'GET /health/ready HTTP/1.1\\r\\nhost: localhost\\r\\n\\r\\n' >&3;timeout 1 cat <&3 | grep -q '200 OK'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # PostgreSQL Main Database
+  postgres-main:
+    image: postgres:16-alpine
+    container_name: it-platform-postgres-main
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+      POSTGRES_DB: "${POSTGRES_DB:-itportal}"
+    ports:
+      - "${POSTGRES_MAIN_PORT:-5432}:5432"
+    volumes:
+      - postgres-main-data:/var/lib/postgresql/data
+    networks:
+      - it-platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-itportal}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # PostgreSQL Audit Database
+  postgres-audit:
+    image: postgres:16-alpine
+    container_name: it-platform-postgres-audit
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+      POSTGRES_DB: "${POSTGRES_AUDIT_DB:-itaudit}"
+    ports:
+      - "${POSTGRES_AUDIT_PORT:-5433}:5432"
+    volumes:
+      - postgres-audit-data:/var/lib/postgresql/data
+    networks:
+      - it-platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_AUDIT_DB:-itaudit}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+networks:
+  it-platform-net:
+    driver: bridge
+
+volumes:
+  ldap-data:
+  ldap-config:
+  postgres-main-data:
+  postgres-audit-data:

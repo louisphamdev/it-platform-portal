@@ -1,0 +1,51 @@
+# UAT Environment Configuration
+# Usage: docker-compose -f docker-compose.base.yml -f docker-compose.uat.yml up
+
+name: it-platform-uat
+
+services:
+  openldap:
+    container_name: it-platform-uat-ldap
+    environment:
+      LDAP_ADMIN_PASSWORD: "${LDAP_ADMIN_PASSWORD:-uat_ldap_pass}"
+    ports:
+      - "389:389"
+
+  keycloak:
+    container_name: it-platform-uat-keycloak
+    environment:
+      KEYCLOAK_ADMIN: "${KEYCLOAK_ADMIN:-uat_admin}"
+      KEYCLOAK_ADMIN_PASSWORD: "${KEYCLOAK_ADMIN_PASSWORD:-uat_keycloak_pass}"
+      KC_DB_URL: "jdbc:postgresql://postgres-uat:5432/keycloak"
+    ports:
+      - "8080:8080"
+
+  postgres-main:
+    container_name: postgres-uat
+    environment:
+      POSTGRES_USER: "uat_postgres"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-uat_postgres_pass}"
+      POSTGRES_DB: "itportal_uat"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-uat-data:/var/lib/postgresql/data
+
+  postgres-audit:
+    container_name: postgres-uat-audit
+    environment:
+      POSTGRES_USER: "uat_postgres"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-uat_postgres_pass}"
+      POSTGRES_DB: "itaudit_uat"
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-uat-audit-data:/var/lib/postgresql/data
+
+networks:
+  it-platform-net:
+    name: it-platform-uat-net
+
+volumes:
+  postgres-uat-data:
+  postgres-uat-audit-data:
