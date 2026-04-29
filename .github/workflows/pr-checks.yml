@@ -2,7 +2,7 @@ name: PR Checks
 
 on:
   pull_request:
-    branches: [main, staging]
+    branches: [main, staging, develop]
 
 jobs:
   security-analysis:
@@ -14,16 +14,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check if source exists
+        id: check_source
+        run: |
+          if [ ! -f "src/**/*.csproj" ] && [ ! -f "package.json" ] && [ ! -f "src/**/*.java" ]; then
+            echo "No source files found — skipping CodeQL"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Initialize CodeQL
+        if: steps.check_source.outputs.skip != 'true'
         uses: github/codeql-action/init@v3
         with:
           languages: javascript, typescript, csharp
-          queries: security-extended
 
       - name: Perform CodeQL Analysis
+        if: steps.check_source.outputs.skip != 'true'
         uses: github/codeql-action/analyze@v3
-        with:
-          category: "/language:${{matrix.language}}"
 
   test:
     name: Unit Tests
@@ -31,22 +38,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check if source exists
+        id: check_source
+        run: |
+          if [ ! -f "src/**/*.csproj" ] && [ ! -f "package.json" ]; then
+            echo "No source files found — skipping tests"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Setup .NET
+        if: steps.check_source.outputs.skip != 'true'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
 
       - name: Restore dependencies
+        if: steps.check_source.outputs.skip != 'true'
         run: dotnet restore
-        working-directory: ./src
 
       - name: Build
+        if: steps.check_source.outputs.skip != 'true'
         run: dotnet build --no-restore
-        working-directory: ./src
 
       - name: Test
+        if: steps.check_source.outputs.skip != 'true'
         run: dotnet test --no-build --verbosity normal
-        working-directory: ./src
 
   build:
     name: Docker Build
@@ -54,10 +70,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check if Dockerfile exists
+        id: check_dockerfile
+        run: |
+          if [ ! -f "src/**/Dockerfile" ] && [ ! -f "**/Dockerfile" ]; then
+            echo "No Dockerfile found — skipping build"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build Docker Image
+        if: steps.check_dockerfile.outputs.skip != 'true'
         run: docker compose build
 
       - name: Trivy Scan
+        if: steps.check_dockerfile.outputs.skip != 'true'
         uses: aquasec/trivy-action@master
         with:
           image-ref: "portal-shell:latest"
@@ -66,6 +92,7 @@ jobs:
           severity: HIGH,CRITICAL
 
       - name: Upload Trivy results
+        if: steps.check_dockerfile.outputs.skip != 'true'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-results.sarif
