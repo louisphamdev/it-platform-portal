@@ -1,0 +1,19 @@
+.container { padding: 24px; }
+.title { font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #111; }
+.card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; }
+.cardHeader { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.cardHeader h2 { font-size: 18px; font-weight: 600; }
+.editBtn { background: #2563eb; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+.editBtn:hover { background: #1d4ed8; }
+.form { display: flex; flex-direction: column; gap: 16px; max-width: 480px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label { font-size: 14px; font-weight: 500; color: #374151; }
+.field input { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
+.field input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,0.2); }
+.actions { display: flex; gap: 8px; }
+.saveBtn { background: #16a34a; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+.saveBtn:hover { background: #15803d; }
+.cancelBtn { background: #fff; color: #374151; border: 1px solid #d1d5db; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+.cancelBtn:hover { background: #f9fafb; }
+.profile { display: flex; flex-direction: column; gap: 8px; }
+.profile p { font-size: 14px; color: #374151; }

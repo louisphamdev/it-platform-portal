@@ -1,0 +1,18 @@
+.container { padding: 24px; max-width: 800px; }
+.title { font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #111; }
+.section { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; margin-bottom: 16px; }
+.section h2 { font-size: 18px; font-weight: 600; margin-bottom: 16px; }
+.info { display: flex; flex-direction: column; gap: 8px; }
+.info p { font-size: 14px; color: #374151; }
+.form { display: flex; flex-direction: column; gap: 12px; max-width: 400px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label { font-size: 14px; font-weight: 500; color: #374151; }
+.field input { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
+.field input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,0.2); }
+.success { padding: 8px 12px; background: #dcfce7; color: #16a34a; border-radius: 6px; font-size: 14px; margin-bottom: 12px; }
+.error { padding: 8px 12px; background: #fee2e2; color: #dc2626; border-radius: 6px; font-size: 14px; margin-bottom: 12px; }
+.saveBtn { background: #2563eb; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; margin-top: 8px; width: fit-content; }
+.saveBtn:hover { background: #1d4ed8; }
+.saveBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+.dangerBtn { background: #dc2626; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+.dangerBtn:hover { background: #b91c1c; }

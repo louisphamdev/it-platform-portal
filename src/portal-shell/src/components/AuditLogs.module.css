@@ -1,0 +1,13 @@
+.container { padding: 24px; }
+.title { font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #111; }
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th { text-align: left; padding: 12px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; font-weight: 600; color: #374151; }
+.table td { padding: 12px; border-bottom: 1px solid #e5e7eb; }
+.badge { padding: 2px 8px; border-radius: 9999px; font-size: 12px; font-weight: 500; }
+.success { background: #dcfce7; color: #16a34a; }
+.error { background: #fee2e2; color: #dc2626; }
+.pagination { display: flex; align-items: center; gap: 16px; margin-top: 16px; }
+.pagination button { padding: 6px 12px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; cursor: pointer; font-size: 14px; }
+.pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
+.pagination button:hover:not(:disabled) { background: #f9fafb; }
+.pagination span { font-size: 14px; color: #6b7280; }
