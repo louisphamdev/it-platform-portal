@@ -7,70 +7,87 @@ on:
     branches: [ main, staging, develop ]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1
       
-      - name: Check if source exists
-        id: check_source
+      - name: Check source files
+        id: check
         run: |
-          csprojs=$(find src -name "*.csproj" 2>/dev/null | head -5)
-          has_csproj=false
-          for f in $csprojs; do [ -f "$f" ] && has_csproj=true && break; done
-          has_npm=false
-          [ -f "src/portal-shell/package.json" ] && has_npm=true
-          if [ "$has_csproj" = false ] && [ "$has_npm" = false ]; then
-            echo "No source files — skipping build"
-            echo "skip_build=true" >> $GITHUB_OUTPUT
-          fi
-          if [ "$has_npm" = true ]; then echo "has_npm=true" >> $GITHUB_OUTPUT; fi
+          echo "=== Environment ==="
+          pwd
+          ls -la
+          echo "=== Checking src/ ==="
+          ls src/ 2>/dev/null || echo "No src dir"
+          
+          csproj_count=$(find src -name "*.csproj" 2>/dev/null | wc -l)
+          npm_exists="false"
+          [ -f "src/portal-shell/package.json" ] && npm_exists="true"
+          
+          echo "Found $csproj_count .csproj files"
+          echo "npm exists: $npm_exists"
+          
+          echo "skip_build=false" >> $GITHUB_OUTPUT
+          echo "has_npm=$npm_exists" >> $GITHUB_OUTPUT
           
       - name: Setup .NET
-        if: steps.check_source.outputs.skip_build != 'true'
+        if: steps.check.outputs.skip_build == 'false'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
           
       - name: Setup Node.js
-        if: steps.check_source.outputs.has_npm == 'true'
+        if: steps.check.outputs.has_npm == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           
-          
       - name: Restore .NET
-        if: steps.check_source.outputs.skip_build != 'true'
+        if: steps.check.outputs.skip_build == 'false'
         run: |
+          echo "=== Restoring .NET packages ==="
           for csproj in $(find src -name "*.csproj"); do
-            dotnet restore "$csproj" || true
+            echo "Restoring: $csproj"
+            dotnet restore "$csproj" --verbosity minimal 2>&1 | head -5 || echo "Restore failed for $csproj"
           done
           
       - name: Restore npm
-        if: steps.check_source.outputs.has_npm == 'true'
-        run: cd src/portal-shell && npm ci
+        if: steps.check.outputs.has_npm == 'true'
+        run: |
+          echo "=== Restoring npm packages ==="
+          cd src/portal-shell
+          npm ci --prefer-offline 2>&1 | tail -20
           
       - name: Build .NET
-        if: steps.check_source.outputs.skip_build != 'true'
+        if: steps.check.outputs.skip_build == 'false'
         run: |
+          echo "=== Building .NET projects ==="
           for csproj in $(find src -name "*.csproj"); do
-            dotnet build "$csproj" --no-restore -c Release || true
+            echo "Building: $csproj"
+            dotnet build "$csproj" --no-restore -c Release 2>&1 | tail -10 || echo "Build failed for $csproj"
           done
           
       - name: Build npm
-        if: steps.check_source.outputs.has_npm == 'true'
-        run: cd src/portal-shell && npm run build || true
+        if: steps.check.outputs.has_npm == 'true'
+        run: |
+          echo "=== Building npm project ==="
+          cd src/portal-shell
+          npm run build 2>&1 | tail -20
           
       - name: Test .NET
-        if: steps.check_source.outputs.skip_build != 'true'
+        if: steps.check.outputs.skip_build == 'false'
         run: |
+          echo "=== Running .NET tests ==="
           for csproj in $(find src -name "*.csproj"); do
-            dotnet test "$csproj" --no-build || true
+            dotnet test "$csproj" --no-build --verbosity normal 2>&1 | tail -15 || echo "Tests failed for $csproj"
           done
