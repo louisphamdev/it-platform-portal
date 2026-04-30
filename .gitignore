@@ -3,10 +3,13 @@ node_modules/
 .pnp/
 .pnp.js
 
+# Next.js
+.next/
+out/
+
 # Build outputs
 dist/
 build/
-out/
 *.dll
 *.exe
 *.dylib
