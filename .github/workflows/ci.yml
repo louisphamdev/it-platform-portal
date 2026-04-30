@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ main, staging, develop ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -41,7 +45,6 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          
           
       - name: Restore .NET
         if: steps.check_source.outputs.skip_build != 'true'
