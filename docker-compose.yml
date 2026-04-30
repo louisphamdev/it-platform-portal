@@ -79,7 +79,7 @@ services:
   # === APPLICATION SERVICES ===
   api-gateway:
     build:
-      context: ./src/api-gateway
+      context: ./src/services/api-gateway
       dockerfile: Dockerfile
     container_name: api-gateway
     environment:
@@ -94,7 +94,7 @@ services:
 
   bff-auth:
     build:
-      context: ./src/bff-auth
+      context: ./src/services/bff-auth
       dockerfile: Dockerfile
     container_name: bff-auth
     environment:
@@ -110,7 +110,7 @@ services:
 
   bff-portal:
     build:
-      context: ./src/bff-portal
+      context: ./src/services/bff-portal
       dockerfile: Dockerfile
     container_name: bff-portal
     environment:
