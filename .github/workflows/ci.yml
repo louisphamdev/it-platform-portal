@@ -41,7 +41,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: 'src/portal-shell/package-lock.json'
+          
           
       - name: Restore .NET
         if: steps.check_source.outputs.skip_build != 'true'
