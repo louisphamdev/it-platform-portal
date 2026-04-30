@@ -5,7 +5,7 @@ on:
     branches: [main]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: deploy-uat-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -35,7 +35,8 @@ jobs:
       - name: Build image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./src/portal-shell
+          file: ./src/portal-shell/Dockerfile
           push: false
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha
@@ -58,7 +59,8 @@ jobs:
         if: success()
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./src/portal-shell
+          file: ./src/portal-shell/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha
