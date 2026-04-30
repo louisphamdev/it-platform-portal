@@ -205,8 +205,8 @@ services:
 
   portal-shell:
     build:
-      context: ./src/portal-shell
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: src/portal-shell/Dockerfile
     container_name: it-platform-portal-shell
     environment:
       NEXT_PUBLIC_API_GATEWAY_URL: "http://api-gateway:7000"

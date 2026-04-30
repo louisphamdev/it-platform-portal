@@ -32,6 +32,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
+          dockerfile: src/portal-shell/Dockerfile
           push: false
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha
