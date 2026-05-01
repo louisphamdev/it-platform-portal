@@ -7,7 +7,8 @@ RUN find src -name "*.csproj" -exec dotnet restore {} \; && \
 FROM node:20-alpine AS portal
 WORKDIR /app
 COPY src/portal-shell/package*.json ./
-RUN npm ci
+# Use npm install instead of npm ci (works without package-lock.json)
+RUN npm install
 COPY src/portal-shell/ ./
 RUN npm run build
 
