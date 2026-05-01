@@ -15,30 +15,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        run: |
-          docker buildx install || true
-          docker buildx version
-          docker buildx create --use --name mybuilder || true
-          docker buildx use mybuilder
-
       - name: Login to GHCR
-        run: docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Docker image
-        run: |
-          echo "=== Building Docker image ==="
-          docker buildx build \
-            --output=type=image,push=true \
-            --file ./Dockerfile \
-            --tag ghcr.io/louisphamdev/it-platform-portal:staging-${{ github.sha }} \
-            --tag ghcr.io/louisphamdev/it-platform-portal:staging-latest \
-            --platform linux/amd64 \
-            --no-cache \
-            .
-
-      - name: Verify image
-        if: success()
-        run: |
-          echo "Image pushed successfully"
-          docker buildx imagetools inspect ghcr.io/louisphamdev/it-platform-portal:staging-${{ github.sha }} || true
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ghcr.io/louisphamdev/it-platform-portal:staging-${{ github.sha }}
+            ghcr.io/louisphamdev/it-platform-portal:staging-latest
