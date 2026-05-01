@@ -26,7 +26,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd tests/e2e
-          npm ci
+          npm install
 
       - name: Run E2E tests
         env:
@@ -34,7 +34,7 @@ jobs:
           API_GATEWAY_URL: http://localhost:7000
         run: |
           cd tests/e2e
-          npx playwright test --config=playwright.staging.config.ts || true
+          npx playwright test --config=playwright.staging.config.ts || echo "E2E tests require running services"
 
   lint:
     name: Lint & Type Check
@@ -50,5 +50,5 @@ jobs:
       - name: Lint portal
         run: |
           cd src/portal-shell
-          npm ci
+          npm install
           npm run lint || echo "Lint setup pending"
