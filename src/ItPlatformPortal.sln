@@ -18,6 +18,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bff.Auth", "bff-auth\Bff.Au
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bff.Portal", "bff-portal\Bff.Portal.csproj", "{88888888-8888-8888-8888-888888888888}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Integration.Auth.Tests", "tests\Integration.Auth.Tests\Integration.Auth.Tests.csproj", "{99999999-9999-9999-9999-999999999999}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -40,5 +42,7 @@ Global
 		{77777777-7777-7777-7777-777777777777}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{88888888-8888-8888-8888-888888888888}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{88888888-8888-8888-8888-888888888888}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{99999999-9999-9999-9999-999999999999}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{99999999-9999-9999-9999-999999999999}.Debug|Any CPU.Build.0 = Debug|Any CPU
 	EndGlobalSection
 EndGlobal
