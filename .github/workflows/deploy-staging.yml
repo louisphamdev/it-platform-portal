@@ -13,23 +13,35 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  debug:
+    name: Debug Environment
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check environment
+        run: |
+          echo "=== ENV ==="
+          echo "GITHUB_RUN_ID: $GITHUB_RUN_ID"
+          echo "GITHUB_REF: $GITHUB_REF"
+          echo "GITHUB_REPOSITORY: $GITHUB_REPOSITORY"
+          echo "=== DOCKER ==="
+          docker info 2>&1 | head -5 || echo "Docker not available"
+          docker --version || echo "Docker not available"
+          echo "=== REPO ==="
+          ls -la
+          echo "=== DOCKERFILES ==="
+          find . -name "Dockerfile" -type f 2>/dev/null || echo "No Dockerfiles found"
+          cat Dockerfile 2>/dev/null | head -5 || echo "No root Dockerfile"
+
   build:
     name: Build & Push
+    needs: debug
     runs-on: ubuntu-latest
     outputs:
       image-tag: ${{ steps.meta.outputs.tags }}
       version: ${{ steps.meta.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Debug repo structure
-        run: |
-          echo "=== Root ==="
-          ls -la
-          echo "=== src/ ==="
-          ls src/ 2>/dev/null || echo "No src/"
-          echo "=== Dockerfile ==="
-          cat Dockerfile 2>/dev/null || echo "No Dockerfile at root"
 
       - name: Extract metadata
         id: meta
@@ -42,42 +54,26 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Debug docker
-        run: |
-          echo "=== Docker version ==="
-          docker --version 2>&1 || echo "No docker"
-          echo "=== Buildx version ==="
-          docker buildx version 2>&1 || echo "No buildx"
-          echo "=== Docker info ==="
-          docker info 2>&1 | head -10 || echo "Docker info failed"
-
       - name: Build image
-        run: |
-          set -x
-          docker buildx build \
-            --progress=plain \
-            --output=type=local,dest=/tmp/build-output \
-            --file ./Dockerfile \
-            --tag ghcr.io/louisphamdev/it-platform-portal:staging-test \
-            --cache-from type=gha \
-            --cache-to type=gha,mode=max \
-            . 2>&1
-
-      - name: Show build output
-        run: |
-          echo "=== Build output ==="
-          ls -laR /tmp/build-output/ 2>/dev/null || echo "No output dir"
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: ${{ env.REGISTRY }}/${{ github.repository }}:staging-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Push image
         if: success()
-        run: |
-          docker buildx build \
-            --output=type=image,push=true \
-            --file ./Dockerfile \
-            --tag ghcr.io/louisphamdev/it-platform-portal:staging-${{ github.sha }} \
-            --cache-from type=gha \
-            --cache-to type=gha,mode=max \
-            .
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ github.repository }}:staging-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   deploy:
     name: Deploy to Staging
