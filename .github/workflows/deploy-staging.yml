@@ -9,8 +9,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  test-docker:
+    name: Test Docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Docker info
+        run: |
+          echo "=== Docker info ==="
+          docker info 2>&1 | head -20
+          echo "=== Docker version ==="
+          docker --version
+          echo "=== Check Dockerfile ==="
+          cat ./Dockerfile
+
   build-and-deploy:
     name: Build & Deploy
+    needs: test-docker
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
