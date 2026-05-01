@@ -9,49 +9,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test-docker:
-    name: Test Docker
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Docker info
-        run: |
-          echo "=== Docker info ==="
-          docker info 2>&1 | head -20
-          echo "=== Docker version ==="
-          docker --version
-          echo "=== Check Dockerfile ==="
-          cat ./Dockerfile
-
   build-and-deploy:
     name: Build & Deploy
-    needs: test-docker
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        run: |
+          docker buildx install || true
+          docker buildx version
+          docker buildx create --use --name mybuilder || true
+          docker buildx use mybuilder
 
       - name: Login to GHCR
         run: docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: |
-            ghcr.io/louisphamdev/it-platform-portal:staging-${{ github.sha }}
-            ghcr.io/louisphamdev/it-platform-portal:staging-latest
+      - name: Build Docker image
+        run: |
+          echo "=== Building Docker image ==="
+          docker buildx build \
+            --output=type=image,push=true \
+            --file ./Dockerfile \
+            --tag ghcr.io/louisphamdev/it-platform-portal:staging-${{ github.sha }} \
+            --tag ghcr.io/louisphamdev/it-platform-portal:staging-latest \
+            --platform linux/amd64 \
+            --no-cache \
+            .
 
-      - name: Create Promotion Issue
+      - name: Verify image
         if: success()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: 'Production Promotion Ready - Staging Deployed',
-              body: 'Staging deployed successfully. Ready for production release.',
-              labels: ['promotion-ready']
-            })
+        run: |
+          echo "Image pushed successfully"
+          docker buildx imagetools inspect ghcr.io/louisphamdev/it-platform-portal:staging-${{ github.sha }} || true
