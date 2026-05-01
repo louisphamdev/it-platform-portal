@@ -22,6 +22,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Debug repo structure
+        run: |
+          echo "=== Root ==="
+          ls -la
+          echo "=== src/ ==="
+          ls src/ 2>/dev/null || echo "No src/"
+          echo "=== Dockerfile ==="
+          cat Dockerfile 2>/dev/null || echo "No Dockerfile at root"
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -40,9 +49,14 @@ jobs:
           file: ./Dockerfile
           push: false
           tags: ${{ steps.meta.outputs.tags }}
-          load: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          outputs: type=local,dest=/tmp/build-output
+
+      - name: Show build output
+        run: |
+          echo "=== Build output ==="
+          ls -la /tmp/build-output/ 2>/dev/null || echo "No output dir"
 
       - name: Push image
         if: success()
