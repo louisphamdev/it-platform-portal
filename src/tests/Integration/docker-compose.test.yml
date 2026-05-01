@@ -1,0 +1,41 @@
+# Integration test environment
+version: '3.9'
+services:
+  api-gateway:
+    build: ../services/api-gateway
+    ports:
+      - "7000:7000"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Testing
+    depends_on:
+      - bff-auth
+      - bff-portal
+
+  bff-auth:
+    build: ../services/bff-auth
+    ports:
+      - "7001:7001"
+      
+  bff-portal:
+    build: ../services/bff-portal
+    ports:
+      - "7002:7002"
+
+  portal-shell:
+    build: ../../src/portal-shell
+    ports:
+      - "3000:3000"
+    depends_on:
+      - keycloak
+      - openldap
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    command: ["start-dev", "--import-realm"]
+    ports:
+      - "8080:8080"
+
+  openldap:
+    image: osixia/openldap:1.5.0
+    ports:
+      - "389:389"
