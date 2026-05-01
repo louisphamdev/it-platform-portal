@@ -12,39 +12,29 @@ jobs:
   build-and-deploy:
     name: Build & Deploy
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure Docker
-        run: |
-          mkdir -p ~/.docker
-          echo '{}' > ~/.docker/config.json 2>/dev/null || true
+      - name: Clear Docker build cache
+        run: docker buildx prune --force || true
 
       - name: Login to GHCR
-        run: |
-          echo "Logging into GHCR..."
-          docker login ghcr.io -u ${{ github.actor }} -p "${{ secrets.GITHUB_TOKEN }}" 2>&1
-          echo "Login completed"
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Debug Dockerfile
-        run: |
-          echo "=== Dockerfile ==="
-          cat ./Dockerfile
-          echo "=== File size ==="
-          wc -l ./Dockerfile
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Build
-        run: |
-          echo "=== Starting build ==="
-          set -x
-          docker build --file ./Dockerfile --tag ghcr.io/louisphamdev/it-platform-portal:staging-${{ github.sha }} . 2>&1
-
-      - name: Push
-        run: |
-          echo "=== Starting push ==="
-          set -x
-          docker push ghcr.io/louisphamdev/it-platform-portal:staging-${{ github.sha }} 2>&1
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          no-cache: true
+          tags: |
+            ghcr.io/louisphamdev/it-platform-portal:staging-${{ github.sha }}
+            ghcr.io/louisphamdev/it-platform-portal:staging-latest
