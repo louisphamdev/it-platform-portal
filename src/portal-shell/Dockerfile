@@ -4,25 +4,15 @@ WORKDIR /app
 EXPOSE 3000
 ENV NODE_ENV=production
 
-# Install dependencies only when needed
+# Install dependencies
 FROM base AS deps
 WORKDIR /app
-COPY src/portal-shell/package.json src/portal-shell/package-lock.json* ./
-RUN npm ci
-
-# Development image
-FROM base AS dev
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY src/portal-shell ./
-ENV NODE_ENV=development
-ENV NEXT_TELEMETRY_DISABLED=1
-CMD ["npm", "run", "dev"]
+COPY src/portal-shell/package.json ./
+RUN npm install
 
 # Build the application
 FROM deps AS builder
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
 COPY src/portal-shell ./
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
