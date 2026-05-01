@@ -1,54 +1,329 @@
 # Production Environment Configuration
 # Usage: docker-compose -f docker-compose.base.yml -f docker-compose.prod.yml up -d
+#
+# IMPORTANT: Production requires external secrets management.
+# All secrets MUST be provided via environment variables or secrets files.
+# Never commit actual secrets to version control.
 
 name: it-platform-prod
 
 services:
+  # === IDENTITY SERVICES ===
   openldap:
     container_name: it-platform-prod-ldap
     environment:
       LDAP_ADMIN_PASSWORD: "${LDAP_ADMIN_PASSWORD}"
+      LDAP_ORGANISATION: "${LDAP_ORGANISATION:-IT Platform Corp}"
+      LDAP_DOMAIN: "${LDAP_DOMAIN:-itplatform.internal}"
+      LDAP_BASE_DN: "${LDAP_BASE_DN:-dc=itplatform,dc=internal}"
     ports:
       - "389:389"
+      - "636:636"
+    volumes:
+      - ldap-data:/var/lib/ldap
+      - ldap-config:/etc/ldap/slapd.d
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    networks:
+      - it-platform-net
+    healthcheck:
+      test: ["CMD", "ldapsearch", "-x", "-H", "ldap://localhost:389", "-b", "dc=itplatform,dc=internal", "-s", "base"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   keycloak:
     container_name: it-platform-prod-keycloak
+    image: quay.io/keycloak/keycloak:24.0
     environment:
       KEYCLOAK_ADMIN: "${KEYCLOAK_ADMIN}"
       KEYCLOAK_ADMIN_PASSWORD: "${KEYCLOAK_ADMIN_PASSWORD}"
-      KC_DB_URL: "jdbc:postgresql://postgres-prod:5432/keycloak"
+      KC_DB: "postgres"
+      KC_DB_URL: "jdbc:postgresql://postgres-main:5432/keycloak"
+      KC_DB_USERNAME: "${POSTGRES_USER}"
+      KC_DB_PASSWORD: "${POSTGRES_PASSWORD}"
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_PORT: "8443"
+      KC_PROXY_HEADERS: "xforwarded"
+      KC_HTTPS_CERTIFICATE_FILE: "/opt/keycloak/conf/server.crt"
+      KC_HTTPS_CERTIFICATE_KEY_FILE: "/opt/keycloak/conf/server.key"
     ports:
       - "8443:8443"
-    command: ["start", "--https-port=8443"]
-    profiles:
-      - production
+    volumes:
+      - ./infra/keycloak/it-platform-realm.json:/opt/keycloak/data/import/it-platform-realm.json:ro
+      - keycloak-certs:/opt/keycloak/conf
+    command: ["start", "--https-port=8443", "--import-realm"]
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    networks:
+      - it-platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8443;echo -e 'GET /health/ready HTTP/1.1\\r\\nhost: localhost\\r\\n\\r\\n' >&3;timeout 1 cat <&3 | grep -q '200 OK'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
+  # === DATABASE SERVICES ===
   postgres-main:
-    container_name: postgres-prod
+    container_name: postgres-prod-main
+    image: postgres:16-alpine
     environment:
       POSTGRES_USER: "${POSTGRES_USER}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
-      POSTGRES_DB: "itportal_prod"
+      POSTGRES_DB: "${POSTGRES_DB:-itplatform_prod}"
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.UTF-8"
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"  # Localhost only in production
     volumes:
-      - postgres-prod-data:/var/lib/postgresql/data
+      - postgres-prod-main-data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init-schema.sql:ro
+      - postgres-prod-main-backups:/backups
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+    networks:
+      - it-platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-itplatform_prod}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
 
   postgres-audit:
     container_name: postgres-prod-audit
+    image: postgres:16-alpine
     environment:
       POSTGRES_USER: "${POSTGRES_USER}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
-      POSTGRES_DB: "itaudit_prod"
+      POSTGRES_DB: "${POSTGRES_AUDIT_DB:-itaudit_prod}"
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.UTF-8"
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"  # Localhost only in production
     volumes:
       - postgres-prod-audit-data:/var/lib/postgresql/data
+      - postgres-prod-audit-backups:/backups
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    networks:
+      - it-platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_AUDIT_DB:-itaudit_prod}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # === APPLICATION SERVICES ===
+  api-gateway:
+    build:
+      context: .
+      dockerfile: src/services/api-gateway/Dockerfile
+    container_name: it-platform-prod-api-gateway
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+      ASPNETCORE_URLS: "http://+:7000"
+      ConnectionStrings__AuthDb: "Host=postgres-main;Port=5432;Database=${POSTGRES_DB:-itplatform_prod};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      Keycloak__Authority: "https://keycloak:8443/realms/it-platform"
+      Keycloak__Audience: "portal-shell"
+      Keycloak__RequireHttpsMetadata: "true"
+      JwtSettings__Secret: "${JWT_SECRET}"
+      JwtSettings__Issuer: "it-platform"
+      JwtSettings__Audience: "portal-shell"
+    ports:
+      - "7000:7000"
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - it-platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:7000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  bff-auth:
+    build:
+      context: .
+      dockerfile: src/services/bff-auth/Dockerfile
+    container_name: it-platform-prod-bff-auth
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+      ASPNETCORE_URLS: "http://+:7001"
+      ConnectionStrings__AuthDb: "Host=postgres-main;Port=5432;Database=${POSTGRES_DB:-itplatform_prod};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      Keycloak__Authority: "https://keycloak:8443/realms/it-platform"
+      Keycloak__ClientId: "${BFF_AUTH_CLIENT_ID:-bff-auth}"
+      Keycloak__ClientSecret: "${BFF_AUTH_CLIENT_SECRET}"
+      Keycloak__RequireHttpsMetadata: "true"
+      JwtSettings__Secret: "${JWT_SECRET}"
+      JwtSettings__Issuer: "it-platform"
+      JwtSettings__Audience: "portal-shell"
+      JwtSettings__ExpiryMinutes: "15"
+      JwtSettings__RefreshExpiryDays: "7"
+      Ldap__Server: "ldaps://openldap:636"
+      Ldap__BaseDn: "${LDAP_BASE_DN:-dc=itplatform,dc=internal}"
+      Ldap__BindDn: "cn=admin,${LDAP_BASE_DN:-dc=itplatform,dc=internal}"
+      Ldap__BindPassword: "${LDAP_ADMIN_PASSWORD}"
+    ports:
+      - "7001:7001"
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+      openldap:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - it-platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:7001/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  bff-portal:
+    build:
+      context: .
+      dockerfile: src/services/bff-portal/Dockerfile
+    container_name: it-platform-prod-bff-portal
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+      ASPNETCORE_URLS: "http://+:7002"
+      ConnectionStrings__AuthDb: "Host=postgres-main;Port=5432;Database=${POSTGRES_DB:-itplatform_prod};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      ConnectionStrings__UserDb: "Host=postgres-main;Port=5432;Database=${POSTGRES_DB:-itplatform_prod};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      ConnectionStrings__TenantDb: "Host=postgres-main;Port=5432;Database=${POSTGRES_DB:-itplatform_prod};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      ConnectionStrings__PermissionDb: "Host=postgres-main;Port=5432;Database=${POSTGRES_DB:-itplatform_prod};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      ConnectionStrings__AuditDb: "Host=postgres-audit;Port=5432;Database=${POSTGRES_AUDIT_DB:-itaudit_prod};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      Keycloak__Authority: "https://keycloak:8443/realms/it-platform"
+      Keycloak__Audience: "portal-shell"
+      Keycloak__RequireHttpsMetadata: "true"
+      JwtSettings__Secret: "${JWT_SECRET}"
+      JwtSettings__Issuer: "it-platform"
+      JwtSettings__Audience: "portal-shell"
+    ports:
+      - "7002:7002"
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+      postgres-audit:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    networks:
+      - it-platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:7002/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  portal-shell:
+    build:
+      context: .
+      dockerfile: src/portal-shell/Dockerfile
+    container_name: it-platform-prod-portal-shell
+    environment:
+      NODE_ENV: "production"
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_API_GATEWAY_URL: "https://portal.itplatform.example.com"
+      NEXT_PUBLIC_KEYCLOAK_URL: "https://keycloak.itplatform.example.com"
+      NEXT_PUBLIC_KEYCLOAK_REALM: "it-platform"
+      NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: "portal-shell"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api-gateway
+      - keycloak
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - it-platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
 
 networks:
   it-platform-net:
     name: it-platform-prod-net
+    driver: bridge
 
 volumes:
-  postgres-prod-data:
+  ldap-data:
+  ldap-config:
+  keycloak-certs:
+  postgres-prod-main-data:
   postgres-prod-audit-data:
+  postgres-prod-main-backups:
+  postgres-prod-audit-backups:

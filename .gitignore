@@ -36,6 +36,10 @@ Thumbs.db
 # Secrets - CRITICAL
 .env
 .env.*
+.env.prod
+.env.staging
+!.env.prod.example
+!.env.staging.example
 .env.local
 .env.*.local
 *.pem
