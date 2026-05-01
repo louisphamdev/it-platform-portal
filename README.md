@@ -345,3 +345,32 @@ docker-compose up -d [service-name]
 ## 📄 License
 
 Internal use only - IT Platform Corp
+
+## 🧪 Testing
+
+### Integration Tests
+```bash
+cd src/tests/Integration
+dotnet test
+docker-compose -f docker-compose.test.yml up
+```
+
+### Manual Testing
+1. Start all services: `docker-compose up -d`
+2. Access Portal: http://localhost:3000
+3. Access Keycloak: http://localhost:8080
+4. Login with: admin / admin123
+
+## 🚀 Deployment
+
+| Environment | Trigger | URL |
+|-------------|---------|-----|
+| UAT | Push to `main` | (auto-deploy disabled - runner issue) |
+| Staging | Push to `staging` | ghcr.io/louisphamdev/it-platform-portal:staging-* |
+| Production | Tag `release/v*` | https://it-platform.internal |
+
+### Environment Variables
+Create `.env` from `.env.example`:
+```bash
+cp .env.example .env
+```
