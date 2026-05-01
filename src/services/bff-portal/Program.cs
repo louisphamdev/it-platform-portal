@@ -33,9 +33,8 @@ builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 
 // JWT Authentication
-var jwtSecret = builder.Configuration["JwtSettings:Secret"] ?? "default-secret-change-in-production";
-var jwtIssuer = builder.Configuration["JwtSettings:Issuer"] ?? "it-platform";
-var jwtAudience = builder.Configuration["JwtSettings:Audience"] ?? "it-platform-portal";
+var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>()!;
+builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
 
 builder.Services.AddAuthentication("Bearer")
     .AddJwtBearer("Bearer", options =>
@@ -46,27 +45,122 @@ builder.Services.AddAuthentication("Bearer")
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtIssuer,
-            ValidAudience = jwtAudience,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret))
+            ValidIssuer = jwtSettings.Issuer,
+            ValidAudience = jwtSettings.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Secret))
         };
     });
 
 builder.Services.AddAuthorization();
-builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddControllers();
 
 var app = builder.Build();
+
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.Append("X-BFF", "BFF-Portal");
+    await next();
+});
 
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Health endpoint
-app.MapGet("/health", () => Results.Ok(new { status = "healthy", service = "bff-portal" }));
+// Basic health check
+app.MapGet("/health", () => Results.Ok(new
+{
+    status = "healthy",
+    service = "bff-portal",
+    timestamp = DateTime.UtcNow,
+    version = "1.0.0"
+}));
 
-// User endpoints
-app.MapGet("/api/users", () => Results.Ok(new { message = "users endpoint" })).RequireAuthorization();
-app.MapGet("/api/tenants", () => Results.Ok(new { message = "tenants endpoint" })).RequireAuthorization();
-app.MapGet("/api/audit", () => Results.Ok(new { message = "audit endpoint" })).RequireAuthorization();
-app.MapGet("/api/permissions", () => Results.Ok(new { message = "permissions endpoint" })).RequireAuthorization();
+// Liveness probe
+app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }));
+
+// Readiness probe - check all database connections
+app.MapGet("/health/ready", async () =>
+{
+    var checks = new Dictionary<string, string>();
+    var isReady = true;
+
+    // Check User database
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var canConnect = await dbContext.Database.CanConnectAsync();
+        checks["user-db"] = canConnect ? "healthy" : "unhealthy";
+        if (!canConnect) isReady = false;
+    }
+    catch (Exception ex)
+    {
+        checks["user-db"] = $"unhealthy: {ex.Message}";
+        isReady = false;
+    }
+
+    // Check Tenant database
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<TenantDbContext>();
+        var canConnect = await dbContext.Database.CanConnectAsync();
+        checks["tenant-db"] = canConnect ? "healthy" : "unhealthy";
+        if (!canConnect) isReady = false;
+    }
+    catch (Exception ex)
+    {
+        checks["tenant-db"] = $"unhealthy: {ex.Message}";
+        isReady = false;
+    }
+
+    // Check Audit database
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
+        var canConnect = await dbContext.Database.CanConnectAsync();
+        checks["audit-db"] = canConnect ? "healthy" : "unhealthy";
+        if (!canConnect) isReady = false;
+    }
+    catch (Exception ex)
+    {
+        checks["audit-db"] = $"unhealthy: {ex.Message}";
+        isReady = false;
+    }
+
+    // Check Permission database
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PermissionDbContext>();
+        var canConnect = await dbContext.Database.CanConnectAsync();
+        checks["permission-db"] = canConnect ? "healthy" : "unhealthy";
+        if (!canConnect) isReady = false;
+    }
+    catch (Exception ex)
+    {
+        checks["permission-db"] = $"unhealthy: {ex.Message}";
+        isReady = false;
+    }
+
+    var result = new
+    {
+        status = isReady ? "ready" : "not_ready",
+        service = "bff-portal",
+        checks,
+        timestamp = DateTime.UtcNow
+    };
+
+    return isReady ? Results.Ok(result) : Results.Json(result, statusCode: 503);
+});
+
+app.MapControllers();
 
 app.Run();
+
+public class JwtSettings
+{
+    public string Secret { get; set; } = string.Empty;
+    public string Issuer { get; set; } = string.Empty;
+    public string Audience { get; set; } = string.Empty;
+}

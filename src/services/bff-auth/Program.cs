@@ -1,3 +1,5 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -36,39 +38,63 @@ builder.Services.AddAuthentication("Bearer")
     });
 
 builder.Services.AddAuthorization();
-builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddControllers();
 
 var app = builder.Build();
+
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.Append("X-BFF", "BFF-Auth");
+    await next();
+});
 
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Health endpoint
-app.MapGet("/health", () => Results.Ok(new { status = "healthy", service = "bff-auth" }));
-
-// Auth endpoints
-app.MapPost("/auth/login", async (IAuthService authService, HttpContext context) =>
+// Basic health check
+app.MapGet("/health", () => Results.Ok(new
 {
-    var body = await context.Request.ReadFromJsonAsync<LoginRequest>();
-    if (body == null) return Results.BadRequest();
-    
-    var result = await authService.LoginAsync(body.Username, body.Password, body.TenantId);
-    if (result == null) return Results.Unauthorized();
-    
-    return Results.Ok(result);
+    status = "healthy",
+    service = "bff-auth",
+    timestamp = DateTime.UtcNow,
+    version = "1.0.0"
+}));
+
+// Liveness probe
+app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }));
+
+// Readiness probe - check database connectivity
+app.MapGet("/health/ready", async () =>
+{
+    var checks = new Dictionary<string, string>();
+    var isReady = true;
+
+    // Check database connection
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+        var canConnect = await dbContext.Database.CanConnectAsync();
+        checks["database"] = canConnect ? "healthy" : "unhealthy";
+        if (!canConnect) isReady = false;
+    }
+    catch (Exception ex)
+    {
+        checks["database"] = $"unhealthy: {ex.Message}";
+        isReady = false;
+    }
+
+    var result = new
+    {
+        status = isReady ? "ready" : "not_ready",
+        service = "bff-auth",
+        checks,
+        timestamp = DateTime.UtcNow
+    };
+
+    return isReady ? Results.Ok(result) : Results.Json(result, statusCode: 503);
 });
 
-app.MapGet("/auth/me", async (HttpContext context, IAuthService authService) =>
-{
-    var userId = context.User.FindFirst("sub")?.Value;
-    if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
-    
-    var user = await authService.GetUserByIdAsync(userId);
-    if (user == null) return Results.NotFound();
-    
-    return Results.Ok(user);
-}).RequireAuthorization();
+app.MapControllers();
 
 app.Run();
-
-public record LoginRequest(string Username, string Password, string? TenantId);
