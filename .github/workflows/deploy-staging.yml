@@ -4,51 +4,15 @@ on:
   push:
     branches: [staging]
 
-env:
-  IMAGE_NAME: it-platform-portal
-  REGISTRY: ghcr.io
-
 jobs:
   build:
-    name: Build & Push
     runs-on: ubuntu-latest
-    outputs:
-      image-tag: ${{ steps.meta.outputs.tags }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}
-          tags: |
-            type=sha,prefix=staging-
-
-      - name: Build and push
+      - name: Build
         uses: docker/build-push-action@v5
         with:
           context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-
-  deploy:
-    name: Deploy to Staging
-    needs: build
-    runs-on: ubuntu-latest
-    environment: staging
-    steps:
-      - name: Deploy
-        run: echo "Deploying to staging"
-
-      - name: Create Promotion Issue
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: 'Production Promotion Ready - Staging Deployed',
-              body: 'Staging deployed successfully. Ready for production release.',
-              labels: ['promotion-ready']
-            })
+          file: ./Dockerfile
+          push: false
+          tags: test:1
