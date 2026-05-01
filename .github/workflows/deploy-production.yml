@@ -5,6 +5,14 @@ on:
     tags:
       - "release/v*"
 
+concurrency:
+  group: deploy-production-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
 env:
   IMAGE_NAME: it-platform-portal
   REGISTRY: ghcr.io
@@ -27,11 +35,23 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ github.repository }}
           tags: |
             type=semver,pattern={{version}}
+            type=sha,prefix=prod-
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
+          file: ./Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
 
@@ -44,10 +64,7 @@ jobs:
       url: https://it-platform.internal
     steps:
       - name: Deploy
-        run: echo "Deploying to production"
-
-      - name: Health check
-        run: echo "Running health checks"
+        run: echo "Would deploy ${{ needs.build.outputs.image-tag }} to production"
 
   release:
     name: Create Release
@@ -65,10 +82,8 @@ jobs:
           body: |
             ## Changes
             Automated production release.
-
             ## Image
             ${{ needs.build.outputs.image-tag }}
-
             ## Environment
             Production: https://it-platform.internal
           generate_release_notes: true

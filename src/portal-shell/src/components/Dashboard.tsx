@@ -1,57 +1,23 @@
-'use client';
-
-import { useAuth } from '@/contexts/AuthContext';
 import styles from './Dashboard.module.css';
 
 export default function Dashboard() {
-  const { user, logout } = useAuth();
+  const stats = [
+    { label: 'Total Users', value: '24' },
+    { label: 'Active Sessions', value: '18' },
+    { label: 'Pending Approvals', value: '3' },
+    { label: 'Audit Events', value: '156' },
+  ];
 
   return (
-    <div className={styles.layout}>
-      <header className={styles.header}>
-        <div className={styles.logo}>IT Platform Portal</div>
-        <div className={styles.userMenu}>
-          <span className={styles.userName}>{user?.username}</span>
-          <span className={styles.userRole}>{user?.roles?.[0] || 'User'}</span>
-          <button onClick={logout} className={styles.logoutBtn}>Logout</button>
-        </div>
-      </header>
-
-      <div className={styles.container}>
-        <aside className={styles.sidebar}>
-          <nav className={styles.nav}>
-            <a href="/dashboard" className={styles.navItem}>Dashboard</a>
-            <a href="/users" className={styles.navItem}>User Management</a>
-            <a href="/tenants" className={styles.navItem}>Tenant Management</a>
-            <a href="/audit" className={styles.navItem}>Audit Logs</a>
-            <a href="/permissions" className={styles.navItem}>Permissions</a>
-            <a href="/settings" className={styles.navItem}>Settings</a>
-          </nav>
-        </aside>
-
-        <main className={styles.main}>
-          <h1 className={styles.welcome}>Welcome, {user?.username}!</h1>
-          <p className={styles.subtitle}>Tenant: {user?.tenantName}</p>
-
-          <div className={styles.grid}>
-            <div className={styles.card}>
-              <h3>Profile</h3>
-              <p>Manage your account settings</p>
-            </div>
-            <div className={styles.card}>
-              <h3>Security</h3>
-              <p>Change password and 2FA</p>
-            </div>
-            <div className={styles.card}>
-              <h3>Notifications</h3>
-              <p>Configure notification preferences</p>
-            </div>
-            <div className={styles.card}>
-              <h3>Activity</h3>
-              <p>View your recent activity</p>
-            </div>
+    <div className={styles.container}>
+      <h2>Dashboard</h2>
+      <div className={styles.grid}>
+        {stats.map((stat) => (
+          <div key={stat.label} className={styles.card}>
+            <span className={styles.value}>{stat.value}</span>
+            <span className={styles.label}>{stat.label}</span>
           </div>
-        </main>
+        ))}
       </div>
     </div>
   );
