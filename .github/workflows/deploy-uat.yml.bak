@@ -4,10 +4,6 @@ on:
   push:
     branches: [main]
 
-concurrency:
-  group: deploy-uat-${{ github.ref }}
-  cancel-in-progress: true
-
 env:
   IMAGE_NAME: it-platform-portal
   REGISTRY: ghcr.io
@@ -18,7 +14,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       image-tag: ${{ steps.meta.outputs.tags }}
-      version: ${{ steps.meta.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -29,7 +24,6 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ github.repository }}
           tags: |
             type=sha,prefix=uat-
-            type=sha
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -37,8 +31,8 @@ jobs:
       - name: Build image
         uses: docker/build-push-action@v5
         with:
-          context: ./src/portal-shell
-          file: ./src/portal-shell/Dockerfile
+          context: .
+          dockerfile: src/portal-shell/Dockerfile
           push: false
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha
@@ -47,33 +41,41 @@ jobs:
       - name: Trivy scan
         uses: aquasec/trivy-action@master
         with:
-          image-ref: "${{ env.REGISTRY }}/${{ github.repository }}:${{ steps.meta.outputs.version }}"
+          image-ref: ${{ steps.meta.outputs.tags }}
           format: sarif
-          output: trivy-uat.sarif
+          output: trivy-results.sarif
           severity: HIGH,CRITICAL
 
-      - name: Upload Trivy results
+      - name: Upload scan results
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: trivy-uat.sarif
-
-      - name: Push image
-        if: success()
-        uses: docker/build-push-action@v5
-        with:
-          context: ./src/portal-shell
-          file: ./src/portal-shell/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          sarif_file: trivy-results.sarif
 
   deploy:
     name: Deploy to UAT
     needs: build
     runs-on: ubuntu-latest
+    environment: uat
     steps:
-      - name: Deploy (placeholder)
+      - name: Deploy to UAT
         run: |
-          echo "Would deploy ${{ needs.build.outputs.image-tag }} to UAT"
-          echo "IMAGE_TAG=${{ needs.build.outputs.image-tag }}" >> $GITHUB_ENV
+          echo "Deploying ${{ needs.build.outputs.image-tag }} to UAT"
+          # TODO: Add actual deploy logic
+
+      - name: Smoke tests
+        run: |
+          echo "Running smoke tests"
+
+  notify:
+    name: Create Release
+    needs: [build, deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: uat-${{ github.sha }}
+          release_name: UAT Release ${{ github.sha }}
+          draft: true

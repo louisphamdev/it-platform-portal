@@ -4,149 +4,231 @@ services:
   # === IDENTITY SERVICES ===
   openldap:
     image: osixia/openldap:1.5.0
-    container_name: ldap
+    container_name: it-platform-openldap
     environment:
-      LDAP_ORGANISATION: IT Platform
-      LDAP_DOMAIN: it-platform.internal
-      LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD:-admin123}
+      LDAP_ORGANISATION: "IT Platform Corp"
+      LDAP_DOMAIN: "itplatform.internal"
+      LDAP_BASE_DN: "dc=itplatform,dc=internal"
+      LDAP_ADMIN_PASSWORD: "${LDAP_ADMIN_PASSWORD:-admin123}"
     ports:
-      - "389:389"
-      - "636:636"
+      - "${LDAP_PORT:-389}:389"
+      - "${LDAP_SSL_PORT:-636}:636"
     volumes:
       - ldap-data:/var/lib/ldap
       - ldap-config:/etc/ldap/slapd.d
+      - ./infra/ldap/ldap-seed.ldif:/container/service/slapd/assets/config/bootstrap/ldif/50-bootstrap.ldif:ro
     networks:
-      - portal-net
+      - it-platform-net
+    healthcheck:
+      test: ["CMD", "ldapsearch", "-x", "-H", "ldap://localhost:389", "-b", "dc=itplatform,dc=internal", "-s", "base"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   keycloak:
-    image: quay.io/keycloak/keycloak:23.0
-    container_name: keycloak
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: it-platform-keycloak
     environment:
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin123}
-      KC_DB_URL: jdbc:postgresql://postgres-keycloak:5432/keycloak
-      KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak123}
-    command: start-dev
+      KEYCLOAK_ADMIN: "${KEYCLOAK_ADMIN:-admin}"
+      KEYCLOAK_ADMIN_PASSWORD: "${KEYCLOAK_ADMIN_PASSWORD:-admin123}"
+      KC_DB: "postgres"
+      KC_DB_URL: "jdbc:postgresql://postgres-main:5432/keycloak"
+      KC_DB_USERNAME: "${POSTGRES_USER:-postgres}"
+      KC_DB_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: "xforwarded"
     ports:
-      - "8080:8080"
+      - "${KEYCLOAK_PORT:-8080}:8080"
+    volumes:
+      - ./infra/keycloak/it-platform-realm.json:/opt/keycloak/data/import/it-platform-realm.json:ro
+    command: ["start-dev", "--import-realm"]
     depends_on:
-      - postgres-keycloak
+      postgres-main:
+        condition: service_healthy
     networks:
-      - portal-net
+      - it-platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080;echo -e 'GET /health/ready HTTP/1.1\\r\\nhost: localhost\\r\\n\\r\\n' >&3;timeout 1 cat <&3 | grep -q '200 OK'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
   # === DATABASE SERVICES ===
   postgres-main:
     image: postgres:16-alpine
-    container_name: postgres-main
+    container_name: it-platform-postgres-main
     environment:
-      POSTGRES_DB: it_platform
-      POSTGRES_USER: platform
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-platform123}
+      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+      POSTGRES_DB: "${POSTGRES_DB:-itplatform}"
     ports:
-      - "5432:5432"
+      - "${POSTGRES_MAIN_PORT:-5432}:5432"
     volumes:
       - postgres-main-data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init-schema.sql:ro
     networks:
-      - portal-net
+      - it-platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-itplatform}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   postgres-audit:
     image: postgres:16-alpine
-    container_name: postgres-audit
+    container_name: it-platform-postgres-audit
     environment:
-      POSTGRES_DB: audit_db
-      POSTGRES_USER: auditor
-      POSTGRES_PASSWORD: ${AUDIT_DB_PASSWORD:-audit123}
+      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+      POSTGRES_DB: "${POSTGRES_AUDIT_DB:-itaudit}"
     ports:
-      - "5433:5432"
+      - "${POSTGRES_AUDIT_PORT:-5433}:5432"
     volumes:
       - postgres-audit-data:/var/lib/postgresql/data
     networks:
-      - portal-net
-
-  postgres-keycloak:
-    image: postgres:16-alpine
-    container_name: postgres-keycloak
-    environment:
-      POSTGRES_DB: keycloak
-      POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak123}
-    volumes:
-      - postgres-keycloak-data:/var/lib/postgresql/data
-    networks:
-      - portal-net
+      - it-platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_AUDIT_DB:-itaudit}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # === APPLICATION SERVICES ===
   api-gateway:
     build:
       context: ./src/services/api-gateway
       dockerfile: Dockerfile
-    container_name: api-gateway
+    container_name: it-platform-api-gateway
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Development}"
+      ASPNETCORE_URLS: "http://+:7000"
+      ConnectionStrings__AuthDb: "Host=postgres-main;Port=5432;Database=${POSTGRES_DB:-itplatform};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}"
+      Keycloak__Authority: "http://keycloak:8080/realms/it-platform"
+      Keycloak__Audience: "portal-shell"
+      JwtSettings__Secret: "${JWT_SECRET:-YourSuperSecretKeyThatIsAtLeast32Chars!}"
+      JwtSettings__Issuer: "it-platform"
+      JwtSettings__Audience: "portal-shell"
     ports:
-      - "7000:7000"
+      - "${API_GATEWAY_PORT:-7000}:7000"
     depends_on:
-      - postgres-main
-      - keycloak
+      postgres-main:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
     networks:
-      - portal-net
+      - it-platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:7000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   bff-auth:
     build:
       context: ./src/services/bff-auth
       dockerfile: Dockerfile
-    container_name: bff-auth
+    container_name: it-platform-bff-auth
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Development}"
+      ASPNETCORE_URLS: "http://+:7001"
+      ConnectionStrings__AuthDb: "Host=postgres-main;Port=5432;Database=${POSTGRES_DB:-itplatform};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}"
+      Keycloak__Authority: "http://keycloak:8080/realms/it-platform"
+      Keycloak__ClientId: "bff-auth"
+      Keycloak__ClientSecret: "${BFF_AUTH_CLIENT_SECRET:-}"
+      JwtSettings__Secret: "${JWT_SECRET:-YourSuperSecretKeyThatIsAtLeast32Chars!}"
+      JwtSettings__Issuer: "it-platform"
+      JwtSettings__Audience: "portal-shell"
+      JwtSettings__ExpiryMinutes: "15"
+      JwtSettings__RefreshExpiryDays: "7"
+      Ldap__Server: "ldap://openldap:389"
+      Ldap__BaseDn: "dc=itplatform,dc=internal"
+      Ldap__BindDn: "cn=admin,dc=itplatform,dc=internal"
+      Ldap__BindPassword: "${LDAP_ADMIN_PASSWORD:-admin123}"
     ports:
-      - "7001:7001"
+      - "${BFF_AUTH_PORT:-7001}:7001"
     depends_on:
-      - postgres-main
-      - openldap
-      - keycloak
+      postgres-main:
+        condition: service_healthy
+      openldap:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
     networks:
-      - portal-net
+      - it-platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:7001/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   bff-portal:
     build:
       context: ./src/services/bff-portal
       dockerfile: Dockerfile
-    container_name: bff-portal
+    container_name: it-platform-bff-portal
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Development}"
+      ASPNETCORE_URLS: "http://+:7002"
+      ConnectionStrings__AuthDb: "Host=postgres-main;Port=5432;Database=${POSTGRES_DB:-itplatform};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}"
+      ConnectionStrings__UserDb: "Host=postgres-main;Port=5432;Database=${POSTGRES_DB:-itplatform};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}"
+      ConnectionStrings__TenantDb: "Host=postgres-main;Port=5432;Database=${POSTGRES_DB:-itplatform};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}"
+      ConnectionStrings__PermissionDb: "Host=postgres-main;Port=5432;Database=${POSTGRES_DB:-itplatform};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}"
+      ConnectionStrings__AuditDb: "Host=postgres-audit;Port=5432;Database=${POSTGRES_AUDIT_DB:-itaudit};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}"
+      Keycloak__Authority: "http://keycloak:8080/realms/it-platform"
+      Keycloak__Audience: "portal-shell"
+      JwtSettings__Secret: "${JWT_SECRET:-YourSuperSecretKeyThatIsAtLeast32Chars!}"
+      JwtSettings__Issuer: "it-platform"
+      JwtSettings__Audience: "portal-shell"
     ports:
-      - "7002:7002"
+      - "${BFF_PORTAL_PORT:-7002}:7002"
     depends_on:
-      - postgres-main
-      - keycloak
+      postgres-main:
+        condition: service_healthy
+      postgres-audit:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
     networks:
-      - portal-net
+      - it-platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:7002/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   portal-shell:
     build:
-      context: ./src/portal-shell
-      dockerfile: Dockerfile
-    container_name: portal-shell
-    ports:
-      - "3000:3000"
+      context: .
+      dockerfile: src/portal-shell/Dockerfile
+    container_name: it-platform-portal-shell
     environment:
-      NEXT_PUBLIC_API_GATEWAY_URL: http://localhost:7000
+      NEXT_PUBLIC_API_GATEWAY_URL: "http://api-gateway:7000"
+      NEXT_PUBLIC_KEYCLOAK_URL: "http://keycloak:8080"
+      NEXT_PUBLIC_KEYCLOAK_REALM: "it-platform"
+      NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: "portal-shell"
+    ports:
+      - "${PORTAL_SHELL_PORT:-3000}:3000"
+    depends_on:
+      - api-gateway
+      - keycloak
     networks:
-      - portal-net
-
-  # === UTILITIES ===
-  trivy:
-    image: aquasec/trivy:latest
-    container_name: trivy
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - trivy-cache:/root/.cache/trivy
-    networks:
-      - portal-net
+      - it-platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
 networks:
-  portal-net:
+  it-platform-net:
     driver: bridge
 
 volumes:
@@ -154,5 +236,3 @@ volumes:
   ldap-config:
   postgres-main-data:
   postgres-audit-data:
-  postgres-keycloak-data:
-  trivy-cache:

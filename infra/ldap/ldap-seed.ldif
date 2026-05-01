@@ -1,0 +1,155 @@
+# LDAP Seed Data for IT Platform
+# Base DN: dc=itplatform,dc=internal
+# Run this after OpenLDAP container starts
+
+version: 1
+
+# Organizational Units
+dn: ou=users,dc=itplatform,dc=internal
+objectClass: organizationalUnit
+ou: users
+
+dn: ou=groups,dc=itplatform,dc=internal
+objectClass: organizationalUnit
+ou: groups
+
+dn: ou=tenants,dc=itplatform,dc=internal
+objectClass: organizationalUnit
+ou: tenants
+
+dn: ou=services,dc=itplatform,dc=internal
+objectClass: organizationalUnit
+ou: services
+
+# Groups
+dn: cn=platform-admins,ou=groups,dc=itplatform,dc=internal
+objectClass: groupOfNames
+cn: platform-admins
+description: Platform Administrator Group
+member: uid=admin,ou=users,dc=itplatform,dc=internal
+
+dn: cn=platform-users,ou=groups,dc=itplatform,dc=internal
+objectClass: groupOfNames
+cn: platform-users
+description: Platform Standard Users Group
+member: uid=admin,ou=users,dc=itplatform,dc=internal
+member: uid=john.doe,ou=users,dc=itplatform,dc=internal
+member: uid=jane.smith,ou=users,dc=itplatform,dc=internal
+
+dn: cn=platform-auditors,ou=groups,dc=itplatform,dc=internal
+objectClass: groupOfNames
+cn: platform-auditors
+description: Platform Auditor Group
+member: uid=auditor,ou=users,dc=itplatform,dc=internal
+
+dn: cn=tenant-alpha,ou=groups,dc=itplatform,dc=internal
+objectClass: groupOfNames
+cn: tenant-alpha
+description: Alpha Tenant Users Group
+member: uid=john.doe,ou=users,dc=itplatform,dc=internal
+
+dn: cn=tenant-beta,ou=groups,dc=itplatform,dc=internal
+objectClass: groupOfNames
+cn: tenant-beta
+description: Beta Tenant Users Group
+member: uid=jane.smith,ou=users,dc=itplatform,dc=internal
+
+# Service Accounts
+dn: cn=bff-auth,ou=services,dc=itplatform,dc=internal
+objectClass: organizationalRole
+cn: bff-auth
+description: BFF Auth Service Account
+
+dn: cn=bff-portal,ou=services,dc=itplatform,dc=internal
+objectClass: organizationalRole
+cn: bff-portal
+description: BFF Portal Service Account
+
+dn: cn=api-gateway,ou=services,dc=itplatform,dc=internal
+objectClass: organizationalRole
+cn: api-gateway
+description: API Gateway Service Account
+
+# Users
+dn: uid=admin,ou=users,dc=itplatform,dc=internal
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: admin
+cn: System Administrator
+sn: Administrator
+givenName: System
+displayName: System Administrator
+mail: admin@itplatform.internal
+uidNumber: 10000
+gidNumber: 10000
+homeDirectory: /home/admin
+loginShell: /bin/bash
+userPassword: {SHA256}admin123  # Change in production!
+
+dn: uid=auditor,ou=users,dc=itplatform,dc=internal
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: auditor
+cn: System Auditor
+sn: Auditor
+givenName: System
+displayName: System Auditor
+mail: auditor@itplatform.internal
+uidNumber: 10001
+gidNumber: 10001
+homeDirectory: /home/auditor
+loginShell: /bin/bash
+userPassword: {SHA256}auditor123  # Change in production!
+
+dn: uid=john.doe,ou=users,dc=itplatform,dc=internal
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: john.doe
+cn: John Doe
+sn: Doe
+givenName: John
+displayName: John Doe
+mail: john.doe@itplatform.internal
+uidNumber: 10002
+gidNumber: 10002
+homeDirectory: /home/john.doe
+loginShell: /bin/bash
+userPassword: {SHA256}johndoe123  # Change in production!
+employeeNumber: EMP-001
+departmentNumber: Engineering
+title: Senior Engineer
+
+dn: uid=jane.smith,ou=users,dc=itplatform,dc=internal
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: jane.smith
+cn: Jane Smith
+sn: Smith
+givenName: Jane
+displayName: Jane Smith
+mail: jane.smith@itplatform.internal
+uidNumber: 10003
+gidNumber: 10003
+homeDirectory: /home/jane.smith
+loginShell: /bin/bash
+userPassword: {SHA256}janesmith123  # Change in production!
+employeeNumber: EMP-002
+departmentNumber: Product
+title: Product Manager
+
+# Tenants (as LDAP entries for reference)
+dn: dc=alpha,ou=tenants,dc=itplatform,dc=internal
+objectClass: domain
+objectClass: top
+dc: alpha
+description: Alpha Tenant Domain
+
+dn: dc=beta,ou=tenants,dc=itplatform,dc=internal
+objectClass: domain
+objectClass: top
+dc: beta
+description: Beta Tenant Domain
