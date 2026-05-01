@@ -33,8 +33,9 @@ builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 
 // JWT Authentication
-var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>()!;
-builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
+var jwtSecret = builder.Configuration["JwtSettings:Secret"] ?? "default-secret-change-in-production";
+var jwtIssuer = builder.Configuration["JwtSettings:Issuer"] ?? "it-platform";
+var jwtAudience = builder.Configuration["JwtSettings:Audience"] ?? "it-platform-portal";
 
 builder.Services.AddAuthentication("Bearer")
     .AddJwtBearer("Bearer", options =>
@@ -45,35 +46,27 @@ builder.Services.AddAuthentication("Bearer")
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtSettings.Issuer,
-            ValidAudience = jwtSettings.Audience,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Secret))
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret))
         };
     });
 
 builder.Services.AddAuthorization();
-builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
 
 var app = builder.Build();
-
-app.Use(async (context, next) =>
-{
-    context.Response.Headers.Append("X-BFF", "BFF-Portal");
-    await next();
-});
 
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapControllers();
-
+// Health endpoint
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", service = "bff-portal" }));
 
-app.Run();
+// User endpoints
+app.MapGet("/api/users", () => Results.Ok(new { message = "users endpoint" })).RequireAuthorization();
+app.MapGet("/api/tenants", () => Results.Ok(new { message = "tenants endpoint" })).RequireAuthorization();
+app.MapGet("/api/audit", () => Results.Ok(new { message = "audit endpoint" })).RequireAuthorization();
+app.MapGet("/api/permissions", () => Results.Ok(new { message = "permissions endpoint" })).RequireAuthorization();
 
-public class JwtSettings
-{
-    public string Secret { get; set; } = string.Empty;
-    public string Issuer { get; set; } = string.Empty;
-    public string Audience { get; set; } = string.Empty;
-}
+app.Run();
