@@ -1,0 +1,79 @@
+name: Deploy UAT
+
+on:
+  push:
+    branches: [main]
+
+env:
+  IMAGE_NAME: it-platform-portal
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    name: Build & Scan
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}
+          tags: |
+            type=sha,prefix=uat-
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          dockerfile: src/portal-shell/Dockerfile
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy scan
+        uses: aquasec/trivy-action@0.19.0
+        with:
+          image-ref: ${{ steps.meta.outputs.tags }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+
+      - name: Upload scan results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
+  deploy:
+    name: Deploy to UAT
+    needs: build
+    runs-on: ubuntu-latest
+    environment: uat
+    steps:
+      - name: Deploy to UAT
+        run: |
+          echo "Deploying ${{ needs.build.outputs.image-tag }} to UAT"
+          # TODO: Add actual deploy logic
+
+      - name: Smoke tests
+        run: |
+          echo "Running smoke tests"
+
+  notify:
+    name: Create Release
+    needs: [build, deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: uat-${{ github.sha }}
+          name: UAT Release ${{ github.sha }}
+          draft: true
