@@ -1,3 +1,5 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -49,8 +51,50 @@ app.Use(async (context, next) =>
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapControllers();
+// Basic health check
+app.MapGet("/health", () => Results.Ok(new
+{
+    status = "healthy",
+    service = "bff-auth",
+    timestamp = DateTime.UtcNow,
+    version = "1.0.0"
+}));
 
-app.MapGet("/health", () => Results.Ok(new { status = "healthy", service = "bff-auth" }));
+// Liveness probe
+app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }));
+
+// Readiness probe - check database connectivity
+app.MapGet("/health/ready", async () =>
+{
+    var checks = new Dictionary<string, string>();
+    var isReady = true;
+
+    // Check database connection
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+        var canConnect = await dbContext.Database.CanConnectAsync();
+        checks["database"] = canConnect ? "healthy" : "unhealthy";
+        if (!canConnect) isReady = false;
+    }
+    catch (Exception ex)
+    {
+        checks["database"] = $"unhealthy: {ex.Message}";
+        isReady = false;
+    }
+
+    var result = new
+    {
+        status = isReady ? "ready" : "not_ready",
+        service = "bff-auth",
+        checks,
+        timestamp = DateTime.UtcNow
+    };
+
+    return isReady ? Results.Ok(result) : Results.Json(result, statusCode: 503);
+});
+
+app.MapControllers();
 
 app.Run();

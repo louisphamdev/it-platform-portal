@@ -65,9 +65,96 @@ app.Use(async (context, next) =>
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapControllers();
+// Basic health check
+app.MapGet("/health", () => Results.Ok(new
+{
+    status = "healthy",
+    service = "bff-portal",
+    timestamp = DateTime.UtcNow,
+    version = "1.0.0"
+}));
 
-app.MapGet("/health", () => Results.Ok(new { status = "healthy", service = "bff-portal" }));
+// Liveness probe
+app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }));
+
+// Readiness probe - check all database connections
+app.MapGet("/health/ready", async () =>
+{
+    var checks = new Dictionary<string, string>();
+    var isReady = true;
+
+    // Check User database
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var canConnect = await dbContext.Database.CanConnectAsync();
+        checks["user-db"] = canConnect ? "healthy" : "unhealthy";
+        if (!canConnect) isReady = false;
+    }
+    catch (Exception ex)
+    {
+        checks["user-db"] = $"unhealthy: {ex.Message}";
+        isReady = false;
+    }
+
+    // Check Tenant database
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<TenantDbContext>();
+        var canConnect = await dbContext.Database.CanConnectAsync();
+        checks["tenant-db"] = canConnect ? "healthy" : "unhealthy";
+        if (!canConnect) isReady = false;
+    }
+    catch (Exception ex)
+    {
+        checks["tenant-db"] = $"unhealthy: {ex.Message}";
+        isReady = false;
+    }
+
+    // Check Audit database
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
+        var canConnect = await dbContext.Database.CanConnectAsync();
+        checks["audit-db"] = canConnect ? "healthy" : "unhealthy";
+        if (!canConnect) isReady = false;
+    }
+    catch (Exception ex)
+    {
+        checks["audit-db"] = $"unhealthy: {ex.Message}";
+        isReady = false;
+    }
+
+    // Check Permission database
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PermissionDbContext>();
+        var canConnect = await dbContext.Database.CanConnectAsync();
+        checks["permission-db"] = canConnect ? "healthy" : "unhealthy";
+        if (!canConnect) isReady = false;
+    }
+    catch (Exception ex)
+    {
+        checks["permission-db"] = $"unhealthy: {ex.Message}";
+        isReady = false;
+    }
+
+    var result = new
+    {
+        status = isReady ? "ready" : "not_ready",
+        service = "bff-portal",
+        checks,
+        timestamp = DateTime.UtcNow
+    };
+
+    return isReady ? Results.Ok(result) : Results.Json(result, statusCode: 503);
+});
+
+app.MapControllers();
 
 app.Run();
 
